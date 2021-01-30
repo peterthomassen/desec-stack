@@ -1,336 +1,330 @@
 <template>
-  <v-container class="fill-height" fluid>
-    <v-row align="center" justify="center">
-      <v-col cols="12" :sm="fullWidth ? '12' : '10'">
-        <v-card>
-          <!-- Error Snackbar -->
-          <v-snackbar
-            v-model="snackbar"
-            color="error"
-            multi-line
-            vertical
-            :timeout="-1"
+  <div>
+    <!-- Error Snackbar -->
+    <v-snackbar
+      v-model="snackbar"
+      color="error"
+      multi-line
+      vertical
+      :timeout="-1"
+    >
+      {{ errors[errors.length - 1] }}
+      <v-btn @click="snackbar = false">
+        Close
+      </v-btn>
+    </v-snackbar>
+
+    <!-- The Actual Table -->
+    <v-data-table
+            :headers="headers"
+            :item-class="itemClass"
+            :items="rows"
+            :search="search"
+            :custom-filter="filterSearchableCols"
+            :loading="$store.getters.working || createDialogWorking || destroyDialogWorking"
+            class="elevation-1"
+            @click:row="rowClick"
+    >
+      <template slot="top">
+        <!-- Headline & Toolbar, Including New Form -->
+        <v-toolbar flat>
+          <v-toolbar-title>{{ headlines.table }}</v-toolbar-title>
+          <v-spacer />
+          <v-text-field
+                  v-model="search"
+                  v-if="$vuetify.breakpoint.smAndUp"
+                  append-icon="mdi-magnify"
+                  label="Search"
+                  single-line
+                  hide-details
+          />
+          <v-spacer v-if="Object.keys(writeableAdvancedColumns).length > 0"/>
+          <v-switch
+              v-model="showAdvanced"
+              v-if="Object.keys(writeableAdvancedColumns).length > 0"
+              label="Show advanced settings"
+              class="mt-6"
+          />
+          <v-spacer />
+          <v-btn
+                  id="create"
+                  color="primary"
+                  dark
+                  small
+                  fab
+                  depressed
+                  :disabled="$store.getters.working"
           >
-            {{ errors[errors.length - 1] }}
-            <v-btn @click="snackbar = false">
-              Close
-            </v-btn>
-          </v-snackbar>
-
-          <!-- The Actual Table -->
-          <v-data-table
-                  :headers="headers"
-                  :item-class="itemClass"
-                  :items="rows"
-                  :search="search"
-                  :custom-filter="filterSearchableCols"
-                  :loading="$store.getters.working || createDialogWorking || destroyDialogWorking"
-                  class="elevation-1"
-                  @click:row="rowClick"
-          >
-            <template slot="top">
-              <!-- Headline & Toolbar, Including New Form -->
-              <v-toolbar flat>
-                <v-toolbar-title>{{ headlines.table }}</v-toolbar-title>
-                <v-spacer />
-                <v-text-field
-                        v-model="search"
-                        v-if="$vuetify.breakpoint.smAndUp"
-                        append-icon="mdi-magnify"
-                        label="Search"
-                        single-line
-                        hide-details
-                />
-                <v-spacer v-if="Object.keys(writeableAdvancedColumns).length > 0"/>
-                <v-switch
-                    v-model="showAdvanced"
-                    v-if="Object.keys(writeableAdvancedColumns).length > 0"
-                    label="Show advanced settings"
-                    class="mt-6"
-                />
-                <v-spacer />
-                <v-btn
-                        id="create"
-                        color="primary"
-                        dark
-                        small
-                        fab
-                        depressed
-                        :disabled="$store.getters.working"
-                >
-                  <v-icon>mdi-plus</v-icon>
-                </v-btn>
-                <template v-slot:extension v-if="$vuetify.breakpoint.xsOnly">
-                  <v-text-field
-                          v-model="search"
-                          append-icon="mdi-magnify"
-                          label="Search"
-                          single-line
-                          hide-details
-                  />
-                </template>
-                <v-dialog
-                        v-if="createable"
-                        v-model="createDialog"
-                        activator="#create"
-                        max-width="500px"
-                        persistent
-                        @keydown.esc="close"
-                >
-                  <v-card>
-                    <v-form v-model="valid" @submit.prevent="save()">
-                      <v-card-title>
-                        <span class="headline">{{ headlines.create }}</span>
-                        <v-spacer />
-                        <v-icon @click.stop="close">
-                          mdi-close
-                        </v-icon>
-                      </v-card-title>
-                      <v-divider />
-                      <v-progress-linear
-                              v-if="createDialogWorking"
-                              height="2"
-                              :indeterminate="true"
-                      />
-
-                      <v-alert
-                              :value="createDialogError"
-                              type="error"
-                              style="overflow: auto"
-                      >
-                        {{ errors[errors.length - 1] }}
-                      </v-alert>
-
-                      <v-alert
-                              :value="createDialogSuccess"
-                              type="success"
-                              style="overflow: auto"
-                      >
-                        <span v-html="texts.createSuccess(createDialogItem)"></span>
-                      </v-alert>
-
-                      <v-alert
-                              :value="!!texts.createWarning(destroyDialogItem)"
-                              type="warning"
-                      >
-                        {{ texts.createWarning(createDialogItem) }}
-                      </v-alert>
-
-                      <v-card-text v-if="createDialog">
-                        <!-- v-if required here to make autofocus below working for the 2nd+ times, cf stackoverflow.com/a/51476992 -->
-                        <span v-html="texts.create()"></span>
-                        <!-- New Form -->
-                        <component
-                                :is="c.datatype"
-                                v-for="(c, id) in writeableStandardColumns"
-                                :key="id"
-                                v-model="createDialogItem[c.value]"
-                                v-bind="c.fieldProps ? c.fieldProps(createDialogItem) : {}"
-                                :label="c.textCreate || c.text"
-                                :error-messages="c.createErrors"
-                                :required="c.required || false"
-                                :disabled="createInhibited || createDialogSuccess"
-                                autofocus
-                                @input="clearErrors(c)"
-                        />
-
-                          <v-expansion-panels
-                              flat
-                              v-if="Object.keys(writeableAdvancedColumns).length > 0"
-                          >
-                            <v-expansion-panel>
-                              <v-expansion-panel-header class="primary lighten-5">
-                                <span>Advanced settings</span>
-                              </v-expansion-panel-header>
-                              <v-expansion-panel-content>
-                                <component
-                                        :is="c.datatype"
-                                        v-for="(c, id) in writeableAdvancedColumns"
-                                        :key="id"
-                                        v-model="createDialogItem[c.value]"
-                                        v-bind="c.fieldProps ? c.fieldProps(createDialogItem) : {}"
-                                        :label="c.textCreate || c.text"
-                                        :error-messages="c.createErrors"
-                                        :required="c.required || false"
-                                        :disabled="createInhibited || createDialogSuccess"
-                                        autofocus
-                                        @input="clearErrors(c)"
-                                />
-                              </v-expansion-panel-content>
-                            </v-expansion-panel>
-                          </v-expansion-panels>
-
-                        <div class="mt-4" v-html="texts.createBottom()"></div>
-                      </v-card-text>
-
-                      <v-card-actions class="pb-4">
-                        <v-spacer />
-                        <v-btn
-                                color="primary"
-                                class="grow"
-                                :outlined="!createDialogSuccess"
-                                :disabled="createDialogWorking"
-                                @click.native="close"
-                        >
-                          {{ createDialogSuccess ? 'Close' : 'Cancel' }}
-                        </v-btn>
-                        <v-btn
-                                type="submit"
-                                color="primary"
-                                class="grow"
-                                depressed
-                                :disabled="createInhibited || !valid || createDialogWorking || createDialogSuccess"
-                                :loading="createDialogWorking"
-                                v-if="!createDialogSuccess"
-                        >
-                          Save
-                        </v-btn>
-                        <v-spacer />
-                      </v-card-actions>
-                    </v-form>
-                  </v-card>
-                </v-dialog>
-              </v-toolbar>
-              <v-alert text type="info" v-if="texts.banner"><span v-html="texts.banner()"></span></v-alert>
-            </template>
-
-            <template
-              v-for="(column, id) in columns"
-              v-slot:[column.name]="itemFieldProps"
-            >
-              <component
-                :is="column.datatype"
-                :key="id"
-                :readonly="column.readonly"
-                :disabled="$store.getters.working || itemIsReadOnly(itemFieldProps.item)"
-                v-model="itemFieldProps.item[column.value]"
-                v-bind="column.fieldProps ? column.fieldProps(itemFieldProps.item) : {}"
-                @keyup="keyupHandler"
-                @dirty="dirty.add(itemFieldProps.item); dirtyError.delete(itemFieldProps.item);"
-              />
-            </template>
-            <template v-slot:[`item.actions`]="itemFieldProps">
-              <v-layout
-                      class="my-1 py-3"
-                      justify-end
-              >
-                <v-btn
-                        v-for="action in actions"
-                        :disabled="$store.getters.working || itemIsReadOnly(itemFieldProps.item)"
-                        :key="action.key"
-                        color="grey"
-                        icon
-                        @click.stop="action.go(itemFieldProps.item)"
-                >
-                  <v-icon>{{ action.icon }}</v-icon>
-                </v-btn>
-                <v-btn
-                        v-if="updatable"
-                        :disabled="$store.getters.working || itemIsReadOnly(itemFieldProps.item)"
-                        color="grey"
-                        icon
-                        @click.stop="save(itemFieldProps.item, $event)"
-                >
-                  <v-icon>mdi-content-save-edit</v-icon>
-                </v-btn>
-                <v-btn
-                        v-if="destroyable"
-                        :disabled="$store.getters.working || itemIsReadOnly(itemFieldProps.item)"
-                        color="grey"
-                        class="hover-red"
-                        icon
-                        @click.stop="destroyAsk(itemFieldProps.item)"
-                >
-                  <v-icon>mdi-delete</v-icon>
-                </v-btn>
-              </v-layout>
-            </template>
-            <template slot="no-data">
-              <div class="py-4 text-xs-center">
-                <h2 class="title">
-                  Feels so empty here!
-                </h2>
-                <p>No entries yet.</p>
-              </div>
-            </template>
-          </v-data-table>
-
-          <!-- Delete Dialog -->
+            <v-icon>mdi-plus</v-icon>
+          </v-btn>
+          <template v-slot:extension v-if="$vuetify.breakpoint.xsOnly">
+            <v-text-field
+                    v-model="search"
+                    append-icon="mdi-magnify"
+                    label="Search"
+                    single-line
+                    hide-details
+            />
+          </template>
           <v-dialog
-            v-model="destroyDialog"
-            max-width="500px"
-            persistent
+                  v-if="createable"
+                  v-model="createDialog"
+                  activator="#create"
+                  max-width="500px"
+                  persistent
+                  @keydown.esc="close"
           >
             <v-card>
-              <v-form @submit.prevent="destroy(destroyDialogItem)">
+              <v-form v-model="valid" @submit.prevent="save()">
                 <v-card-title>
-                  <span class="headline">{{ headlines.destroy }}</span>
+                  <span class="headline">{{ headlines.create }}</span>
+                  <v-spacer />
+                  <v-icon @click.stop="close">
+                    mdi-close
+                  </v-icon>
                 </v-card-title>
-
                 <v-divider />
                 <v-progress-linear
-                  v-if="destroyDialogWorking"
-                  height="2"
-                  :indeterminate="true"
+                        v-if="createDialogWorking"
+                        height="2"
+                        :indeterminate="true"
                 />
 
                 <v-alert
-                        :value="!!texts.destroyInfo(destroyDialogItem)"
-                        type="info"
-                >
-                  {{ texts.destroyInfo(destroyDialogItem) }}
-                </v-alert>
-                <v-alert
-                        :value="!!texts.destroyWarning(destroyDialogItem)"
-                        type="warning"
-                >
-                  {{ texts.destroyWarning(destroyDialogItem) }}
-                </v-alert>
-                <v-alert
-                  :value="!!destroyDialogError"
-                  type="error"
+                        :value="createDialogError"
+                        type="error"
+                        style="overflow: auto"
                 >
                   {{ errors[errors.length - 1] }}
                 </v-alert>
 
-                <v-card-text>
-                  {{ texts.destroy(destroyDialogItem) }}
+                <v-alert
+                        :value="createDialogSuccess"
+                        type="success"
+                        style="overflow: auto"
+                >
+                  <span v-html="texts.createSuccess(createDialogItem)"></span>
+                </v-alert>
+
+                <v-alert
+                        :value="!!texts.createWarning(destroyDialogItem)"
+                        type="warning"
+                >
+                  {{ texts.createWarning(createDialogItem) }}
+                </v-alert>
+
+                <v-card-text v-if="createDialog">
+                  <!-- v-if required here to make autofocus below working for the 2nd+ times, cf stackoverflow.com/a/51476992 -->
+                  <span v-html="texts.create()"></span>
+                  <!-- New Form -->
+                  <component
+                          :is="c.datatype"
+                          v-for="(c, id) in writeableStandardColumns"
+                          :key="id"
+                          v-model="createDialogItem[c.value]"
+                          v-bind="c.fieldProps ? c.fieldProps(createDialogItem) : {}"
+                          :label="c.textCreate || c.text"
+                          :error-messages="c.createErrors"
+                          :required="c.required || false"
+                          :disabled="createInhibited || createDialogSuccess"
+                          autofocus
+                          @input="clearErrors(c)"
+                  />
+
+                    <v-expansion-panels
+                        flat
+                        v-if="Object.keys(writeableAdvancedColumns).length > 0"
+                    >
+                      <v-expansion-panel>
+                        <v-expansion-panel-header class="primary lighten-5">
+                          <span>Advanced settings</span>
+                        </v-expansion-panel-header>
+                        <v-expansion-panel-content>
+                          <component
+                                  :is="c.datatype"
+                                  v-for="(c, id) in writeableAdvancedColumns"
+                                  :key="id"
+                                  v-model="createDialogItem[c.value]"
+                                  v-bind="c.fieldProps ? c.fieldProps(createDialogItem) : {}"
+                                  :label="c.textCreate || c.text"
+                                  :error-messages="c.createErrors"
+                                  :required="c.required || false"
+                                  :disabled="createInhibited || createDialogSuccess"
+                                  autofocus
+                                  @input="clearErrors(c)"
+                          />
+                        </v-expansion-panel-content>
+                      </v-expansion-panel>
+                    </v-expansion-panels>
+
+                  <div class="mt-4" v-html="texts.createBottom()"></div>
                 </v-card-text>
 
-                <v-card-actions>
+                <v-card-actions class="pb-4">
                   <v-spacer />
                   <v-btn
-                    color="primary"
-                    class="grow"
-                    outlined
-                    :disabled="destroyDialogWorking"
-                    @click.native="destroyClose"
+                          color="primary"
+                          class="grow"
+                          :outlined="!createDialogSuccess"
+                          :disabled="createDialogWorking"
+                          @click.native="close"
                   >
-                    Cancel
+                    {{ createDialogSuccess ? 'Close' : 'Cancel' }}
                   </v-btn>
                   <v-btn
-                    color="primary"
-                    class="grow"
-                    depressed
-                    type="submit"
-                    :loading="destroyDialogWorking"
+                          type="submit"
+                          color="primary"
+                          class="grow"
+                          depressed
+                          :disabled="createInhibited || !valid || createDialogWorking || createDialogSuccess"
+                          :loading="createDialogWorking"
+                          v-if="!createDialogSuccess"
                   >
-                    Delete
+                    Save
                   </v-btn>
                   <v-spacer />
                 </v-card-actions>
               </v-form>
             </v-card>
           </v-dialog>
-          <component
-                  :is="extraComponentName"
-                  v-bind="extraComponentBind"
-                  @input="() => { this.extraComponentName = ''; }"
-          ></component>
-        </v-card>
-      </v-col>
-    </v-row>
-  </v-container>
+        </v-toolbar>
+        <v-alert text type="info" v-if="texts.banner"><span v-html="texts.banner()"></span></v-alert>
+      </template>
+
+      <template
+        v-for="(column, id) in columns"
+        v-slot:[column.name]="itemFieldProps"
+      >
+        <component
+          :is="column.datatype"
+          :key="id"
+          :readonly="column.readonly"
+          :disabled="$store.getters.working || itemIsReadOnly(itemFieldProps.item)"
+          v-model="itemFieldProps.item[column.value]"
+          v-bind="column.fieldProps ? column.fieldProps(itemFieldProps.item) : {}"
+          @keyup="keyupHandler"
+          @dirty="dirty.add(itemFieldProps.item); dirtyError.delete(itemFieldProps.item);"
+        />
+      </template>
+      <template v-slot:[`item.actions`]="itemFieldProps">
+        <v-layout
+                class="my-1 py-3"
+                justify-end
+        >
+          <v-btn
+                  v-for="action in actions"
+                  :disabled="$store.getters.working || itemIsReadOnly(itemFieldProps.item)"
+                  :key="action.key"
+                  color="grey"
+                  icon
+                  @click.stop="action.go(itemFieldProps.item)"
+          >
+            <v-icon>{{ action.icon }}</v-icon>
+          </v-btn>
+          <v-btn
+                  v-if="updatable"
+                  :disabled="$store.getters.working || itemIsReadOnly(itemFieldProps.item)"
+                  color="grey"
+                  icon
+                  @click.stop="save(itemFieldProps.item, $event)"
+          >
+            <v-icon>mdi-content-save-edit</v-icon>
+          </v-btn>
+          <v-btn
+                  v-if="destroyable"
+                  :disabled="$store.getters.working || itemIsReadOnly(itemFieldProps.item)"
+                  color="grey"
+                  class="hover-red"
+                  icon
+                  @click.stop="destroyAsk(itemFieldProps.item)"
+          >
+            <v-icon>mdi-delete</v-icon>
+          </v-btn>
+        </v-layout>
+      </template>
+      <template slot="no-data">
+        <div class="py-4 text-xs-center">
+          <h2 class="title">
+            Feels so empty here!
+          </h2>
+          <p>No entries yet.</p>
+        </div>
+      </template>
+    </v-data-table>
+
+    <!-- Delete Dialog -->
+    <v-dialog
+      v-model="destroyDialog"
+      max-width="500px"
+      persistent
+    >
+      <v-card>
+        <v-form @submit.prevent="destroy(destroyDialogItem)">
+          <v-card-title>
+            <span class="headline">{{ headlines.destroy }}</span>
+          </v-card-title>
+
+          <v-divider />
+          <v-progress-linear
+            v-if="destroyDialogWorking"
+            height="2"
+            :indeterminate="true"
+          />
+
+          <v-alert
+                  :value="!!texts.destroyInfo(destroyDialogItem)"
+                  type="info"
+          >
+            {{ texts.destroyInfo(destroyDialogItem) }}
+          </v-alert>
+          <v-alert
+                  :value="!!texts.destroyWarning(destroyDialogItem)"
+                  type="warning"
+          >
+            {{ texts.destroyWarning(destroyDialogItem) }}
+          </v-alert>
+          <v-alert
+            :value="!!destroyDialogError"
+            type="error"
+          >
+            {{ errors[errors.length - 1] }}
+          </v-alert>
+
+          <v-card-text>
+            {{ texts.destroy(destroyDialogItem) }}
+          </v-card-text>
+
+          <v-card-actions>
+            <v-spacer />
+            <v-btn
+              color="primary"
+              class="grow"
+              outlined
+              :disabled="destroyDialogWorking"
+              @click.native="destroyClose"
+            >
+              Cancel
+            </v-btn>
+            <v-btn
+              color="primary"
+              class="grow"
+              depressed
+              type="submit"
+              :loading="destroyDialogWorking"
+            >
+              Delete
+            </v-btn>
+            <v-spacer />
+          </v-card-actions>
+        </v-form>
+      </v-card>
+    </v-dialog>
+    <component
+            :is="extraComponentName"
+            v-bind="extraComponentBind"
+            @input="() => { this.extraComponentName = ''; }"
+    ></component>
+  </div>
 </template>
 
 <script>
