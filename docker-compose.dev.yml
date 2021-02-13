@@ -71,10 +71,7 @@ services:
     volumes:
     - ./webapp/:/usr/src/app/
     working_dir: /usr/src/app/
-    command: "npm run serve --fix"
-    environment:
-    - HOST=0.0.0.0
-    - PORT=443
+    command: bash -c "npm install && npm run serve"
     networks:
     - rearwebapp
     logging:
