@@ -338,6 +338,7 @@ import Record from '@/components/Field/Record';
 import RecordList from '@/components/Field/RecordList';
 import Switchbox from '@/components/Field/Switchbox';
 import TTL from '@/components/Field/TTL';
+import MultilineText from "@/components/Field/MultilineText";
 
 const filter = function (obj, predicate) {
   const result = {};
@@ -366,6 +367,7 @@ export default {
     Record,
     RecordList,
     TTL,
+    MultilineText,
   },
   data() { return {
     createDialog: false,

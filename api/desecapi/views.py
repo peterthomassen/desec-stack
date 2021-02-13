@@ -751,3 +751,21 @@ class AuthenticatedRenewDomainBasicUserActionView(AuthenticatedActionView):
 class CaptchaView(generics.CreateAPIView):
     serializer_class = serializers.CaptchaSerializer
     throttle_scope = 'account_management_passive'
+
+
+class IdentityViewSet(IdempotentDestroyMixin, viewsets.ModelViewSet):
+    permission_classes = (IsAuthenticated, IsOwner,)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+
+class TLSIdentityViewSet(IdentityViewSet):
+    serializer_class = serializers.TLSIdentitySerializer
+
+    @property
+    def throttle_scope(self):
+        return 'dns_api_read' if self.request.method in SAFE_METHODS else 'dns_api_write'
+
+    def get_queryset(self):
+        return self.request.user.identities.all()  # TODO filter for TLS

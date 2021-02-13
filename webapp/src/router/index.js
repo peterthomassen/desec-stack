@@ -123,6 +123,12 @@ const routes = [
     component: () => import(/* webpackChunkName: "gui" */ '../views/Domain/CrudDomain.vue'),
     meta: {guest: false},
   },
+  {
+    path: '/dane',
+    name: 'dane',
+    component: () => import(/* webpackChunkName: "gui" */ '../views/DaneHome.vue'),
+    meta: {guest: false},
+  },
 ]
 
 const router = new VueRouter({

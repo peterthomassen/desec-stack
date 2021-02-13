@@ -12,10 +12,12 @@ import uuid
 from datetime import timedelta
 from functools import cached_property
 from hashlib import sha256
+from typing import Set, List, Optional, Tuple, Dict
 
 import dns
 import psl_dns
 import rest_framework.authtoken.models
+from cryptography import x509, hazmat
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import AbstractBaseUser, AnonymousUser, BaseUserManager
@@ -946,3 +948,209 @@ class Captcha(ExportModelOperationsMixin('Captcha'), models.Model):
             and
             age <= settings.CAPTCHA_VALIDITY_PERIOD  # not expired
         )
+
+
+class Identity(models.Model):
+    rr_type = None
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=24, default="")
+    created = models.DateTimeField(auto_now_add=True)
+    owner = models.ForeignKey(User, on_delete=models.PROTECT, related_name='identities')
+    default_ttl = models.PositiveIntegerField(default=300)
+
+    class Meta:
+        abstract = True
+
+    def get_record_contents(self) -> List[str]:
+        raise NotImplementedError
+
+    def save_rrs(self):
+        raise NotImplementedError
+
+    def save(self, *args, **kwargs):
+        self.save_rrs()
+        return super().save(*args, **kwargs)
+
+    def delete_rrs(self):
+        raise NotImplementedError
+
+    def delete(self, using=None, keep_parents=False):
+        # TODO this will delete also RRs that may be covered by other identities
+        self.delete_rrs()
+        return super().delete(using, keep_parents)
+
+    def get_or_create_rr_set(self, domain: Domain, subname: str) -> RRset:
+        try:
+            return RRset.objects.get(domain=domain, subname=subname, type=self.rr_type)
+        except RRset.DoesNotExist:
+            # TODO save this RRset?
+            return RRset(domain=domain, subname=subname, type=self.rr_type, ttl=self.default_ttl)
+
+    @staticmethod
+    def get_or_create_rr(rrset: RRset, content: str) -> RR:
+        try:
+            return RR.objects.get(rrset=rrset, content=content)
+        except RR.DoesNotExist:
+            return RR(rrset=rrset, content=content)
+
+
+class TLSIdentity(Identity):
+    rr_type = 'TLSA'
+
+    class CertificateUsage(models.IntegerChoices):
+        CA_CONSTRAINT = 0
+        SERVICE_CERTIFICATE_CONSTRAINT = 1
+        TRUST_ANCHOR_ASSERTION = 2
+        DOMAIN_ISSUED_CERTIFICATE = 3
+
+    class Selector(models.IntegerChoices):
+        FULL_CERTIFICATE = 0
+        SUBJECT_PUBLIC_KEY_INFO = 1
+
+    class MatchingType(models.IntegerChoices):
+        NO_HASH_USED = 0
+        SHA256 = 1
+        SHA512 = 2
+
+    class Protocol(models.TextChoices):
+        TCP = 'tcp'
+        UDP = 'udp'
+        SCTP = 'sctp'
+
+    certificate = models.TextField()
+
+    tlsa_selector = models.IntegerField(choices=Selector.choices, default=Selector.SUBJECT_PUBLIC_KEY_INFO)
+    tlsa_matching_type = models.IntegerField(choices=MatchingType.choices, default=MatchingType.SHA256)
+    tlsa_certificate_usage = models.IntegerField(choices=CertificateUsage.choices,
+                                                 default=CertificateUsage.DOMAIN_ISSUED_CERTIFICATE)
+
+    port = models.IntegerField(default=443)
+    protocol = models.TextField(choices=Protocol.choices, default=Protocol.TCP)
+
+    scheduled_removal = models.DateTimeField(null=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'not_valid_after' not in kwargs:
+            self.scheduled_removal = self.not_valid_after
+
+    def get_record_contents(self) -> List[str]:
+        # choose hash function
+        if self.tlsa_matching_type == self.MatchingType.SHA256:
+            hash_function = hazmat.primitives.hashes.SHA256()
+        elif self.tlsa_matching_type == self.MatchingType.SHA512:
+            hash_function = hazmat.primitives.hashes.SHA512()
+        else:
+            raise NotImplementedError
+
+        # choose data to hash
+        if self.tlsa_selector == self.Selector.SUBJECT_PUBLIC_KEY_INFO:
+            to_be_hashed = self._cert.public_key().public_bytes(
+                hazmat.primitives.serialization.Encoding.DER,
+                hazmat.primitives.serialization.PublicFormat.SubjectPublicKeyInfo
+            )
+        else:
+            raise NotImplementedError
+
+        # compute the hash
+        h = hazmat.primitives.hashes.Hash(hash_function)
+        h.update(to_be_hashed)
+        hash = h.finalize().hex()
+
+        # create TLSA record content
+        return [f"{self.tlsa_certificate_usage} {self.tlsa_selector} {self.tlsa_matching_type} {hash}"]
+
+    @property
+    def _cert(self) -> x509.Certificate:
+        return x509.load_pem_x509_certificate(self.certificate.encode())
+
+    @property
+    def fingerprint(self) -> str:
+        return self._cert.fingerprint(hazmat.primitives.hashes.SHA256()).hex()
+
+    @property
+    def subject_names(self) -> Set[str]:
+        subject_names = {
+            x.value for x in
+            self._cert.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)
+        }
+
+        try:
+            subject_alternative_names = {
+                x for x in
+                self._cert.extensions.get_extension_for_oid(
+                    x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME).value.get_values_for_type(x509.DNSName)
+            }
+        except x509.extensions.ExtensionNotFound:
+            subject_alternative_names = set()
+
+        return subject_names | subject_alternative_names
+
+    @staticmethod
+    def get_closest_ancestor(domain_name, owner: User) -> Optional[Domain]:
+        # TODO move to Domain?
+        labels = domain_name.split('.')
+        ancestor_names = ['.'.join(labels[i:]) for i in range(len(labels))]
+        for ancestor_name in ancestor_names:  # TODO do this with one query
+            try:
+                return Domain.objects.get(name=ancestor_name, owner=owner)
+            except Domain.DoesNotExist:
+                continue
+        return None
+
+    def domains_subnames(self) -> Set[Tuple[Domain, str]]:
+        domains_subnames = set()
+        for name in self.subject_names:
+            # cut off any wildcard prefix
+            name = name.lstrip('*').lstrip('.')
+
+            # filter names for valid domain names
+            try:
+                validate_domain_name[1](name)
+            except ValidationError:
+                continue
+
+            # find user-owned parent domain
+            domain = self.get_closest_ancestor(name, self.owner)
+            if not domain:
+                continue
+            subname = name[:-len(domain.name)].rstrip('.')
+
+            # return subname, domain pair
+            domains_subnames.add((domain, f"_{self.port:n}._{self.protocol}.{subname}".rstrip('.')))
+        return domains_subnames
+
+    def get_rrsets(self) -> List[RRset]:
+        rrsets = []
+        for domain, subname in self.domains_subnames():
+            rrsets.append(self.get_or_create_rr_set(domain, subname))
+        return rrsets
+
+    def get_rrs(self) -> List[RR]:
+        rrs = []
+        for domain, subname in self.domains_subnames():
+            rrset = self.get_or_create_rr_set(domain, subname)
+            for content in self.get_record_contents():
+                rrs.append(self.get_or_create_rr(rrset=rrset, content=content))
+        return rrs
+
+    def save_rrs(self):
+        for rr in self.get_rrs():
+            rr.rrset.save()
+            rr.save()
+
+    def delete_rrs(self):
+        for domain, subname in self.domains_subnames():
+            rrset = self.get_or_create_rr_set(domain, subname)
+            rrset.records.filter(content__in=self.get_record_contents()).delete()
+            if not len(rrset.records.all()):
+                rrset.delete()
+
+    @property
+    def not_valid_before(self):
+        return self._cert.not_valid_before
+
+    @property
+    def not_valid_after(self):
+        return self._cert.not_valid_after
