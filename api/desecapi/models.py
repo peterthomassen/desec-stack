@@ -421,6 +421,7 @@ class Token(ExportModelOperationsMixin('Token'), rest_framework.authtoken.models
     allowed_subnets = ArrayField(CidrAddressField(), default=_allowed_subnets_default.__func__)
     max_age = models.DurationField(null=True, default=None, validators=[MinValueValidator(timedelta(0))])
     max_unused_period = models.DurationField(null=True, default=None, validators=[MinValueValidator(timedelta(0))])
+    domain_policies = models.ManyToManyField(Domain, through='TokenDomainPolicy')
 
     plain = None
     objects = NetManager()
@@ -454,6 +455,22 @@ class Token(ExportModelOperationsMixin('Token'), rest_framework.authtoken.models
     def make_hash(plain):
         return make_password(plain, salt='static', hasher='pbkdf2_sha256_iter1')
 
+
+class TokenDomainPolicy(ExportModelOperationsMixin('TokenDomainPolicy'), models.Model):
+    token = models.ForeignKey(Token, on_delete=models.CASCADE)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True)
+    perm_dyndns = models.BooleanField(default=False)
+    perm_other = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['token', 'domain'], name='unique_entry'),
+            models.UniqueConstraint(fields=['token'], condition=Q(domain__isnull=True), name='unique_entry_null_domain')
+        ]
+
+    @property
+    def any_perm(self):
+        return any(getattr(self, field.name) for field in self._meta.get_fields() if field.name.startswith('perm_'))
 
 class Donation(ExportModelOperationsMixin('Donation'), models.Model):
     @staticmethod
