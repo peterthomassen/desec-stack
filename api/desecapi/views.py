@@ -98,7 +98,7 @@ class TokenViewSet(IdempotentDestroyMixin, viewsets.ModelViewSet):
     throttle_scope = 'account_management_passive'
 
     def get_queryset(self):
-        return self.request.user.auth_tokens.all()
+        return self.request.user.token_set.all()
 
     def get_serializer(self, *args, **kwargs):
         # When creating a new token, return the plaintext representation

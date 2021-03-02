@@ -414,10 +414,7 @@ class Token(ExportModelOperationsMixin('Token'), rest_framework.authtoken.models
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     key = models.CharField("Key", max_length=128, db_index=True, unique=True)
-    user = models.ForeignKey(
-        User, related_name='auth_tokens',
-        on_delete=models.CASCADE, verbose_name="User"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     name = models.CharField('Name', blank=True, max_length=64)
     last_used = models.DateTimeField(null=True, blank=True)
     perm_manage_tokens = models.BooleanField(default=False)

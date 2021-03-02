@@ -1,5 +1,3 @@
-from ipaddress import IPv4Network
-
 from rest_framework import status
 
 from desecapi.models import Token
