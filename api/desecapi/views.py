@@ -113,6 +113,17 @@ class TokenViewSet(IdempotentDestroyMixin, viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
+class TokenDomainPolicyViewSet(viewsets.ModelViewSet):
+    serializer_class = serializers.TokenDomainPolicySerializer
+    permission_classes = (IsAuthenticated,)
+    throttle_scope = 'account_management_passive'
+
+    def get_queryset(self):
+        ### TODO token manage permission?
+        print('============= ID', self.kwargs['id'])
+        return self.request.user.token_set.get(id=self.kwargs['id']).domain_policies
+
+
 class DomainViewSet(IdempotentDestroyMixin,
                     mixins.CreateModelMixin,
                     mixins.RetrieveModelMixin,

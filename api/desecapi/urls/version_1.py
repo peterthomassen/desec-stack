@@ -6,6 +6,9 @@ from desecapi import views
 tokens_router = SimpleRouter()
 tokens_router.register(r'', views.TokenViewSet, basename='token')
 
+tokendomainpolicies_router = SimpleRouter()
+tokendomainpolicies_router.register(r'', views.TokenDomainPolicyViewSet, basename='token_domain_policies')
+
 auth_urls = [
     # User management
     path('', views.AccountCreateView.as_view(), name='register'),
@@ -18,6 +21,7 @@ auth_urls = [
 
     # Token management
     path('tokens/', include(tokens_router.urls)),
+    path('tokens/<id>/domain_policies/', include(tokendomainpolicies_router.urls))
 ]
 
 domains_router = SimpleRouter()

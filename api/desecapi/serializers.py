@@ -75,6 +75,14 @@ class TokenSerializer(serializers.ModelSerializer):
         return fields
 
 
+class TokenDomainPolicySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = models.TokenDomainPolicy
+        fields = ('domain', 'perm_dyndns', 'perm_other',)
+        read_only_fields = ('domain',)
+
+
 class RequiredOnPartialUpdateCharField(serializers.CharField):
     """
     This field is always required, even for partial updates (e.g. using PATCH).
