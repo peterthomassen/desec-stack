@@ -57,6 +57,13 @@
             :to="{name: item.name}"
           >
             {{ item.text }}
+            <v-chip
+                class="ml-2"
+                v-if="item.beta"
+                small
+            >
+              BETA
+            </v-chip>
           </v-tab>
           <v-spacer></v-spacer>
           <v-menu
@@ -235,6 +242,11 @@ export default {
         'name': 'tokens',
         'text': 'Token Management',
       },
+      'dane': {
+        'name': 'dane',
+        'text': 'DANE Management',
+        'beta': true,
+      }
     },
     tabmenumore: {
       'change-email': {

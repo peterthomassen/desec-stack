@@ -6,6 +6,9 @@ from desecapi import views
 tokens_router = SimpleRouter()
 tokens_router.register(r'', views.TokenViewSet, basename='token')
 
+identities_router = SimpleRouter()
+identities_router.register(r'tls', views.TLSIdentityViewSet, basename='identities-tls')
+
 auth_urls = [
     # User management
     path('', views.AccountCreateView.as_view(), name='register'),
@@ -56,6 +59,9 @@ api_urls = [
 
     # CAPTCHA
     path('captcha/', views.CaptchaView.as_view(), name='captcha'),
+
+    # Identities management
+    path('identities/', include(identities_router.urls)),
 ]
 
 app_name = 'desecapi'
