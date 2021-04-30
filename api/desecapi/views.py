@@ -114,14 +114,25 @@ class TokenViewSet(IdempotentDestroyMixin, viewsets.ModelViewSet):
 
 
 class TokenDomainPolicyViewSet(viewsets.ModelViewSet):
-    serializer_class = serializers.TokenDomainPolicySerializer
+    lookup_field = 'domain__name'
+    pagination_class = None
     permission_classes = (IsAuthenticated,)
+    serializer_class = serializers.TokenDomainPolicySerializer
     throttle_scope = 'account_management_passive'
+
+    def dispatch(self, request, *args, **kwargs):
+        # map default policy onto domain_id IS NULL
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        try:
+            if kwargs[lookup_url_kwarg] == 'default':
+                kwargs[lookup_url_kwarg] = None
+        except KeyError:
+            pass
+        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
         ### TODO token manage permission?
-        print('============= ID', self.kwargs['id'])
-        return self.request.user.token_set.get(id=self.kwargs['id']).domain_policies
+        return models.TokenDomainPolicy.objects.filter(token_id=self.kwargs['id'], token__user=self.request.user)
 
 
 class DomainViewSet(IdempotentDestroyMixin,

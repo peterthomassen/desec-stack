@@ -10,6 +10,7 @@ from captcha.image import ImageCaptcha
 from django.contrib.auth.password_validation import validate_password
 from django.core.validators import MinValueValidator
 from django.db.models import Model, Q
+from django.db.utils import InternalError
 from django.utils import timezone
 from netfields import rest_framework as netfields_rf
 from rest_framework import fields, serializers
@@ -76,11 +77,23 @@ class TokenSerializer(serializers.ModelSerializer):
 
 
 class TokenDomainPolicySerializer(serializers.ModelSerializer):
+    # TODO objects.all()?
+    domain = serializers.SlugRelatedField(allow_null=True, queryset=models.Domain.objects.all(), slug_field='name')
 
     class Meta:
         model = models.TokenDomainPolicy
         fields = ('domain', 'perm_dyndns', 'perm_other',)
         read_only_fields = ('domain',)
+
+    def to_internal_value(self, data):
+        return {**super().to_internal_value(data),
+                'token': self.context['request'].user.token_set.get(id=self.context['view'].kwargs['id'])}
+
+    def save(self, **kwargs):
+        try:
+            return super().save(**kwargs)
+        except InternalError:
+            raise serializers.ValidationError('Policy precedence: A default policy must exist before others.')  # TODO dict
 
 
 class RequiredOnPartialUpdateCharField(serializers.CharField):
