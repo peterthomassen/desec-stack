@@ -16,4 +16,5 @@ psl-dns~=1.0
 pylibmc~=1.6.1
 pyyaml~=5.4.1
 requests~=2.25.0
+uritemplate~=3.0.1
 uwsgi~=2.0.0

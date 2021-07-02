@@ -68,6 +68,7 @@ class IdempotentDestroyMixin:
 
 
 class DomainViewMixin:
+    domain = models.Domain()
 
     @property
     def throttle_scope(self):
@@ -245,7 +246,7 @@ class RRsetList(EmptyPayloadMixin, DomainViewMixin, generics.ListCreateAPIView, 
     def get_serializer(self, *args, **kwargs):
         kwargs = kwargs.copy()
 
-        if 'many' not in kwargs:
+        if 'many' not in kwargs and self.request:
             if self.request.method in ['POST']:
                 kwargs['many'] = isinstance(kwargs.get('data'), list)
             elif self.request.method in ['PATCH', 'PUT']:
@@ -359,6 +360,9 @@ class DynDNS12UpdateView(generics.GenericAPIView):
 
     @cached_property
     def domain(self):
+        if self.request is None:
+            return models.Domain()
+
         try:
             return models.Domain.objects.filter_qname(self.qname, owner=self.request.user).order_by('-name_length')[0]
         except (IndexError, ValueError):
@@ -635,7 +639,7 @@ class AuthenticatedActionView(generics.GenericAPIView):
     def get_serializer_context(self):
         return {
             **super().get_serializer_context(),
-            'code': self.kwargs['code'],
+            'code': self.kwargs.get('code'),
             'validity_period': self.get_serializer_class().validity_period,
         }
 
