@@ -14,6 +14,7 @@ from functools import cached_property
 from hashlib import sha256
 
 import dns
+import pgtrigger
 import psl_dns
 import rest_framework.authtoken.models
 from django.conf import settings
@@ -414,16 +415,14 @@ class Token(ExportModelOperationsMixin('Token'), rest_framework.authtoken.models
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     key = models.CharField("Key", max_length=128, db_index=True, unique=True)
-    user = models.ForeignKey(
-        User, related_name='auth_tokens',
-        on_delete=models.CASCADE, verbose_name="User"
-    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     name = models.CharField('Name', blank=True, max_length=64)
     last_used = models.DateTimeField(null=True, blank=True)
     perm_manage_tokens = models.BooleanField(default=False)
     allowed_subnets = ArrayField(CidrAddressField(), default=_allowed_subnets_default.__func__)
     max_age = models.DurationField(null=True, default=None, validators=[MinValueValidator(timedelta(0))])
     max_unused_period = models.DurationField(null=True, default=None, validators=[MinValueValidator(timedelta(0))])
+    domain_policies = models.ManyToManyField(Domain, through='TokenDomainPolicy')
 
     plain = None
     objects = NetManager()
@@ -457,6 +456,47 @@ class Token(ExportModelOperationsMixin('Token'), rest_framework.authtoken.models
     def make_hash(plain):
         return make_password(plain, salt='static', hasher='pbkdf2_sha256_iter1')
 
+
+@pgtrigger.register(
+    # Trigger `condition` arguments (corresponding to WHEN clause) don't support subqueries, so we mostly use `func`
+    pgtrigger.Trigger(
+        name='default_policy_on_insert',
+        operation=pgtrigger.Insert,
+        when=pgtrigger.Before,
+        func="IF (NEW.domain_id IS NOT NULL and NOT EXISTS(SELECT * FROM desecapi_tokendomainpolicy WHERE domain_id IS NULL AND token_id = NEW.token_id)) THEN "
+             "  RAISE EXCEPTION 'Cannot insert non-default policy into % table when default policy is not present', TG_TABLE_NAME; "
+             "END IF; RETURN NEW;",
+    ),
+    pgtrigger.Protect(
+        name='default_policy_on_update',
+        operation=pgtrigger.Update,
+        when=pgtrigger.Before,
+        condition=pgtrigger.Q(old__domain__isnull=True, new__domain__isnull=False),
+    ),
+    pgtrigger.Trigger(
+        name='default_policy_on_delete',
+        operation=pgtrigger.Delete,
+        when=pgtrigger.Before,
+        func="IF (OLD.domain_id IS NULL and EXISTS(SELECT * FROM desecapi_tokendomainpolicy WHERE domain_id IS NOT NULL AND token_id = OLD.token_id)) THEN "
+             "  RAISE EXCEPTION 'Cannot delete default policy from % table when non-default policy is present', TG_TABLE_NAME; "
+             "END IF; RETURN OLD;",
+    ),
+)
+class TokenDomainPolicy(ExportModelOperationsMixin('TokenDomainPolicy'), models.Model):
+    token = models.ForeignKey(Token, on_delete=models.CASCADE)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, null=True)
+    perm_dyndns = models.BooleanField(default=False)
+    perm_other = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['token', 'domain'], name='unique_entry'),
+            models.UniqueConstraint(fields=['token'], condition=Q(domain__isnull=True), name='unique_entry_null_domain')
+        ]
+
+    @property
+    def any_perm(self):
+        return any(getattr(self, field.name) for field in self._meta.get_fields() if field.name.startswith('perm_'))
 
 class Donation(ExportModelOperationsMixin('Donation'), models.Model):
     @staticmethod

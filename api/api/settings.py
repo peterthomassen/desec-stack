@@ -47,6 +47,7 @@ INSTALLED_APPS = (
     'desecapi.apps.AppConfig',
     'corsheaders',
     'django_prometheus',
+    'pgtrigger',
 )
 
 MIDDLEWARE = (

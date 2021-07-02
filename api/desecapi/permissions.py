@@ -2,6 +2,8 @@ from ipaddress import IPv4Address, IPv4Network
 
 from rest_framework import permissions
 
+from desecapi.models import TokenDomainPolicy
+
 
 class IsOwner(permissions.BasePermission):
     """
@@ -19,6 +21,48 @@ class IsDomainOwner(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         return obj.domain.owner == request.user
+
+
+class TokenDomainPolicyBasePermission(permissions.BasePermission):
+    """
+    Base permission to check whether a token authorizes specific actions on a domain.
+    """
+    perm_field = 'any_perm'
+
+    def _has_object_permission(self, request, view, obj):
+        ### TODO reduce number of queries?
+
+        # Try domain-specific policy first
+        try:
+            return getattr(TokenDomainPolicy.objects.get(token=request.auth, domain=obj), self.perm_field)
+        except TokenDomainPolicy.DoesNotExist:
+            pass
+
+        # Try general policy
+        try:
+            return getattr(TokenDomainPolicy.objects.get(token=request.auth, domain__isnull=True), self.perm_field)
+        except TokenDomainPolicy.DoesNotExist:
+            pass
+
+        # Else, allow if and only if the token has no domain policy at all
+        return not TokenDomainPolicy.objects.filter(token=request.auth).exists()
+
+
+class TokenHasDomainObjectPermission(TokenDomainPolicyBasePermission):
+    has_object_permission = TokenDomainPolicyBasePermission._has_object_permission
+
+
+class TokenHasViewDomainPermission(TokenDomainPolicyBasePermission):
+
+    def has_permission(self, request, view):
+        return self._has_object_permission(request, view, view.domain)
+
+
+class TokenHasViewDomainDynPermission(TokenHasViewDomainPermission):
+    """
+    Custom permission to check whether a token authorizes using the dynDNS interface for the view domain.
+    """
+    perm_field = 'perm_dyndns'
 
 
 class IsVPNClient(permissions.BasePermission):
