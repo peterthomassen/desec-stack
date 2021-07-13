@@ -30,10 +30,10 @@ def query_serial(zone, server):
 
 
 class Command(BaseCommand):
-    help = 'Check slaves for consistency with nsmaster.'
+    help = 'Check secondaries for consistency with nsmaster.'
 
     def __init__(self, *args, **kwargs):
-        self.servers = {gethostbyname(server): server for server in settings.WATCHDOG_SLAVES}
+        self.servers = {gethostbyname(server): server for server in settings.WATCHDOG_SECONDARIES}
         super().__init__(*args, **kwargs)
 
     def add_arguments(self, parser):
@@ -45,7 +45,7 @@ class Command(BaseCommand):
 
     def find_outdated_servers(self, zone, local_serial):
         """
-        Returns a dict, the key being the outdated slave name, and the value being the slave's current zone serial.
+        Returns a dict, the key being the outdated secondary name, and the value being the node's current zone serial.
         """
         outdated = {}
         for server in self.servers:
@@ -67,7 +67,7 @@ class Command(BaseCommand):
         sleep(options['delay'])
 
         outdated_zone_count = 0
-        outdated_slaves = set()
+        outdated_secondaries = set()
 
         output = []
         timeouts = {}
@@ -80,7 +80,7 @@ class Command(BaseCommand):
             outdated_serials = {k: serial for k, serial in outdated_serials.items() if serial is not False}
 
             if outdated_serials:
-                outdated_slaves.update(outdated_serials.keys())
+                outdated_secondaries.update(outdated_serials.keys())
                 output.append(f'{zone} ({local_serial}) is outdated on {outdated_serials}')
                 print(output[-1])
                 outdated_zone_count += 1
@@ -90,25 +90,25 @@ class Command(BaseCommand):
         output.append(f'Checked {len(serials)} domains, {outdated_zone_count} were outdated.')
         print(output[-1])
 
-        self.report(outdated_slaves, output, timeouts)
+        self.report(outdated_secondaries, output, timeouts)
 
-    def report(self, outdated_slaves, output, timeouts):
-        if not outdated_slaves and not timeouts:
+    def report(self, outdated_secondaries, output, timeouts):
+        if not outdated_secondaries and not timeouts:
             return
 
-        subject = f'{timeouts and "CRITICAL ALERT" or "ALERT"} {len(outdated_slaves)} slaves out of sync'
+        subject = f'{timeouts and "CRITICAL ALERT" or "ALERT"} {len(outdated_secondaries)} secondaries out of sync'
         message = ''
 
         if timeouts:
             message += f'The following servers had timeouts:\n\n{timeouts}\n\n'
 
-        if outdated_slaves:
-            message += f'The following {len(outdated_slaves)} slaves are out of sync:\n'
-            for outdated_slave in outdated_slaves:
-                message += f'* {outdated_slave}\n'
+        if outdated_secondaries:
+            message += f'The following {len(outdated_secondaries)} secondaries are out of sync:\n'
+            for outdated_secondary in outdated_secondaries:
+                message += f'* {outdated_secondary}\n'
             message += '\n'
 
-        message += f'Current slave IPs: {self.servers}\n'
+        message += f'Current secondary IPs: {self.servers}\n'
         message += '\n'.join(output)
 
         mail_admins(subject, message, connection=get_connection('django.core.mail.backends.smtp.EmailBackend'))
