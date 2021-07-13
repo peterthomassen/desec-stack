@@ -439,8 +439,7 @@ class MockPDNSTestCase(APITestCase):
                     'bits': 256,
                     'dnskey': '257 3 13 EVBcsqrnOp6RGWtsrr9QW8cUtt/'
                               'WI5C81RcCZDTGNI9elAiMQlxRdnic+7V+b7jJDE2vgY08qAbxiNh5NdzkzA==',
-                    'ds': [
-                        '62745 13 1 642d70d9bb84903ca4c4ca08a6e4f1e9465aeaa6',
+                    'cds': [
                         '62745 13 2 5cddaeaa383e2ea7de49bd1212bf520228f0e3b334626517e5f6a68eb85b48f6',
                         '62745 13 4 b3f2565901ddcb0b78337301cf863d1045774377bca05c7ad69e17a167734b92'
                         '9f0a49b7edcca913eb6f5dfeac4645b8'
