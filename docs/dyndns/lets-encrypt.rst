@@ -24,8 +24,8 @@ steps.
    the owner/permissions of the file (``chown``/``chmod``), so that it is only
    readable by your certbot user (usually ``root``). ::
 
-     wget https://raw.githubusercontent.com/desec-io/desec-certbot-hook/master/hook.sh
-     wget https://raw.githubusercontent.com/desec-io/desec-certbot-hook/master/.dedynauth
+     wget https://raw.githubusercontent.com/desec-io/desec-certbot-hook/main/hook.sh
+     wget https://raw.githubusercontent.com/desec-io/desec-certbot-hook/main/.dedynauth
 
 #. **Get a token.** You need to configure an API token so that certbot can use
    it to authenticate its requests towards the deSEC API. The easiest way to

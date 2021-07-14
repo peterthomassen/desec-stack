@@ -1,3 +1,4 @@
+import glob
 import json
 import os
 import random
@@ -18,6 +19,24 @@ import pytest
 import requests
 from requests.exceptions import SSLError
 from urllib3.exceptions import InsecureRequestWarning
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--skip-performance-tests", action="store_true", default=False, help="skip expensive performance tests"
+    )
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "performance: mark test as expensive performance test")
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--skip-performance-tests"):
+        skip_mark = pytest.mark.skip(reason="need --runslow option to run")
+        for item in items:
+            if "performance" in item.keywords:
+                item.add_marker(skip_mark)
 
 
 def tsprint(s, *args, **kwargs):
@@ -54,31 +73,20 @@ def random_password() -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(16))
 
 
-def random_domainname() -> str:
-    return (
-        "".join(random.choice(string.ascii_lowercase) for _ in range(16))
-        + ".test"
-    )
-
-
-def random_local_public_suffix_domainname() -> str:
-    return (
-        "".join(random.choice(string.ascii_lowercase) for _ in range(16))
-        + ".dedyn."
-        + os.environ['DESECSTACK_DOMAIN']
-    )
+def random_domainname(suffix='test') -> str:
+    return "".join(random.choice(string.ascii_lowercase) for _ in range(16)) + f'.{suffix}'
 
 
 class DeSECAPIV1Client:
     base_url = "https://desec." + os.environ["DESECSTACK_DOMAIN"] + "/api/v1"
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "User-Agent": "e2e2",
-    }
 
     def __init__(self) -> None:
         super().__init__()
+        self.headers = {  # instance-local
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "e2e2",
+        }
         self.email = None
         self.password = None
         self.domains = {}
@@ -89,10 +97,7 @@ class DeSECAPIV1Client:
         # (2) against the default certificate store, if /autocert is not available
         # (this is usually the case when run outside a docker container)
         self.verify = True
-        self.verify_alt = [
-            f'/autocert/desec.{os.environ["DESECSTACK_DOMAIN"]}.cer',
-            f'/autocert/get.desec.{os.environ["DESECSTACK_DOMAIN"]}.cer',
-        ]
+        self.verify_alt = glob.glob('/autocert/*.cer')
 
     @staticmethod
     def _filter_response_output(output: dict) -> dict:
@@ -110,16 +115,19 @@ class DeSECAPIV1Client:
             return None
 
     def _do_request(self, *args, **kwargs):
-        verify_list = [self.verify] + self.verify_alt
-        # do not verify SSL if we're in faketime (cert will be expired!?)
-        if faketime_get() != '+0d':
+        if 'verify' in kwargs:
+            verify_list = [kwargs.pop('verify')]
+        elif faketime_get() != '+0d':
+            # do not verify SSL if we're in faketime (cert will be expired!?)
             verify_list = [False]
+        else:
+            verify_list = [self.verify] + self.verify_alt
 
         exc = None
         for verify in verify_list:
             try:
                 with warnings.catch_warnings():
-                    if verify_list == [False]:
+                    if not verify:
                         # Suppress insecurity warning if we do not want to verify
                         warnings.filterwarnings('ignore', category=InsecureRequestWarning)
                     reply = requests.request(*args, **kwargs, verify=verify)
@@ -172,6 +180,9 @@ class DeSECAPIV1Client:
     def get(self, path: str, **kwargs) -> requests.Response:
         return self._request("GET", path=path, **kwargs)
 
+    def options(self, path: str, **kwargs) -> requests.Response:
+        return self._request("OPTIONS", path=path, **kwargs)
+
     def post(self, path: str, data: Optional[dict] = None, **kwargs) -> requests.Response:
         return self._request("POST", path=path, data=data, **kwargs)
 
@@ -203,9 +214,9 @@ class DeSECAPIV1Client:
         response = self.post(
             "/auth/login/", data={"email": email, "password": password}
         )
-        token = response.json().get('token')
-        if token is not None:
-            self.headers["Authorization"] = f'Token {response.json()["token"]}'
+        self.token = response.json().get('token')
+        if self.token is not None:
+            self.headers["Authorization"] = f'Token {self.token}'
             self.patch(  # make token last forever
                 f"/auth/tokens/{response.json().get('id')}/",
                 data={'max_unused_period': None, 'max_age': None}
@@ -268,12 +279,24 @@ class DeSECAPIV1Client:
         return {' '.join(param) for param in params}
 
 
+class DeSECAPIV2Client(DeSECAPIV1Client):
+    base_url = "https://desec." + os.environ["DESECSTACK_DOMAIN"] + "/api/v2"
+
+
 @pytest.fixture
 def api_anon() -> DeSECAPIV1Client:
     """
     Anonymous access to the API.
     """
     return DeSECAPIV1Client()
+
+
+@pytest.fixture
+def api_anon_v2() -> DeSECAPIV2Client:
+    """
+    Anonymous access to the API.
+    """
+    return DeSECAPIV2Client()
 
 
 @pytest.fixture()
@@ -300,6 +323,71 @@ def api_user_domain(api_user) -> DeSECAPIV1Client:
     return api_user
 
 
+@pytest.fixture()
+def api_user_domain_rrsets(api_user_domain, init_rrsets: dict) -> DeSECAPIV1Client:
+    """
+    Access to the API with a fresh user account that owns a domain with random name. The domain is
+    equipped with RRsets from init_rrsets.
+    """
+
+    def _normalize_rrset(rrset, qtype):
+        if qtype not in ('CDS', 'CDNSKEY', 'DNSKEY'):
+            return rrset
+        ttl, records = rrset
+        return ttl, {' '.join(map(lambda x: x.replace(' ', ''), record.split(' ', 3))) for record in records}
+
+    def _assert_rrsets(self, rrsets):
+        rrsets_api = {
+            (rrset['subname'], rrset['type']): (rrset['ttl'], set(rrset['records']))
+            for rrset in self.get(f'/domains/{self.domain}/rrsets/').json()
+        }
+        rrsets_dns = {
+            (subname, qtype): _normalize_rrset(NSLordClient.query(f'{subname}.{self.domain}'.lstrip('.'), qtype), qtype)
+            for subname, qtype in rrsets.keys()
+        }
+
+        for k, v in rrsets.items():
+            v = v or init_rrsets[k]  # if None, check against init_rrsets
+            if not v[1]:
+                assert k not in rrsets_api
+                assert not rrsets_dns[k][1]
+            else:
+                assert rrsets_api[k] == v
+                assert rrsets_dns[k] == v
+
+    api_user_domain.assert_rrsets = _assert_rrsets.__get__(api_user_domain)  # very hacky way of adding a method
+
+    api_user_domain.post(f"/domains/{api_user_domain.domain}/rrsets/", data=[
+        {"subname": k[0], "type": k[1], "ttl": v[0], "records": list(v[1])}
+        for k, v in init_rrsets.items()
+    ])
+    api_user_domain.assert_rrsets(init_rrsets)
+    return api_user_domain
+
+
+api_user_lps = api_user
+
+
+@pytest.fixture()
+def lps(api_user_lps) -> DeSECAPIV1Client:
+    """
+    Access to the API with a fresh user account that owns a local public suffix.
+    """
+    lps = "dedyn." + os.environ['DESECSTACK_DOMAIN']
+    api_user_lps.domain_create(lps)  # may return 400 if exists, but that's ok
+    return lps
+
+
+@pytest.fixture()
+def api_user_lps_domain(api_user, lps) -> DeSECAPIV1Client:
+    """
+    Access to the API with a fresh user account that owns a domain with random name under a local public suffix.
+    The domain has no records other than the default ones.
+    """
+    api_user.domain_create(random_domainname(suffix=lps))
+    return api_user
+
+
 class NSClient:
     where = None
 
@@ -317,10 +405,10 @@ class NSClient:
             section = dns.message.AUTHORITY if qtype == dns.rdatatype.from_text('NS') else dns.message.ANSWER
             response = answer.find_rrset(section, qname, dns.rdataclass.IN, qtype)
             tsprint(f'DNS <<< {response}')
-            return {i.to_text() for i in response.items}
+            return response.ttl, {i.to_text() for i in response.items}
         except KeyError:
             tsprint('DNS <<< !!! not found !!! Complete Answer below:\n' + answer.to_text())
-            return {}
+            return None, set()
 
 
 class NSLordClient(NSClient):
@@ -375,10 +463,11 @@ def return_eventually(expression: callable, min_pause: float = .1, max_pause: fl
             wait = min(2 * wait, max_pause)
 
 
-def assert_eventually(assertion: callable, min_pause: float = .1, max_pause: float = 2, timeout: float = 5) -> None:
+def assert_eventually(assertion: callable, min_pause: float = .1, max_pause: float = 2, timeout: float = 5,
+                      retry_on: Tuple[type] = (AssertionError,)) -> None:
     def _assert():
         assert assertion()
-    return_eventually(_assert, min_pause, max_pause, timeout, retry_on=(AssertionError,))
+    return_eventually(_assert, min_pause, max_pause, timeout, retry_on=retry_on)
 
 
 def faketime(t: str):
@@ -395,12 +484,18 @@ def faketime_get():
         return '+0d'
 
 
-def faketime_add(days: int):
-    assert days >= 0
+class FaketimeShift:
+    def __init__(self, days: int):
+        assert days >= 0
+        self.days = days
 
-    current_faketime = faketime_get()
-    assert current_faketime[0] == '+'
-    assert current_faketime[-1] == 'd'
-    current_days = int(current_faketime[1:-1])
+    def __enter__(self):
+        self._faketime = faketime_get()
+        assert self._faketime[0] == '+'
+        assert self._faketime[-1] == 'd'
+        current_days = int(self._faketime[1:-1])
 
-    faketime(f'+{current_days + days:n}d')
+        faketime(f'+{current_days + self.days:n}d')
+
+    def __exit__(self, type, value, traceback):
+        faketime(self._faketime)

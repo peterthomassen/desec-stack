@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Figure out how to route responses when slaves access through VPN
+# Correctly route responses when secondaries access through VPN
 /sbin/ip route add 10.8.0.0/24 via 172.16.7.2
 
 # Prometheus basic auth

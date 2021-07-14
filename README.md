@@ -11,7 +11,7 @@ This is a docker-compose application providing the basic stack for deSEC name se
 - `celery`: A shadow instance of the `api` code for performing asynchronous tasks (email delivery).
 - `rabbitmq`: `celery`'s queue
 - `memcached`: `api`-wide in-memory cache, currently used to keep API throttling state
-- `openvpn-server`: OpenVPN server used to tunnel replication traffic between this stack and frontend DNS slaves
+- `openvpn-server`: OpenVPN server used to tunnel replication traffic between this stack and frontend DNS secondaries
 - `prometheus`: Prometheus server for monitoring
 
 Requirements
@@ -27,13 +27,13 @@ Although most configuration is contained in this repository, some external depen
     - Then, copy `ca.crt`, `server.crt`, and `server.key` to `openvpn-server/secrets/`.
     - Create a preshared secret using `openvpn --genkey --secret ta.key` inside `openvpn-server/secrets/`.
 
-    For provisioning a slave, use the same `easy-rsa` PKI and create a new `client.key` and `client.crt` pair. Transfer these securely onto the slave, along with `ca.crt` and `ta.key`.
-    (You can also create the key on the slave and only transfer a certificate signing request and the certificate.) 
+    For provisioning a secondary, use the same `easy-rsa` PKI and create a new `client.key` and `client.crt` pair. Transfer these securely onto the secondary, along with `ca.crt` and `ta.key`.
+    (You can also create the key on the secondary and only transfer a certificate signing request and the certificate.)
 
 3.  Set sensitive information and network topology using environment variables or an `.env` file. You need (you can use the `.env.default` file as a template):
     - global
       - `DESECSTACK_DOMAIN`: domain name under which the entire system will be running. The API will be reachable at https://desec.$DESECSTACK_DOMAIN/api/. For development setup, we recommend using `yourname.dedyn.io`
-      - `DESECSTACK_NS`: the names of the authoritative name servers, i.e. names pointing to your slave name servers. Minimum 2.
+      - `DESECSTACK_NS`: the names of the authoritative name servers, i.e. names pointing to your secondary name servers. Minimum 2.
     - network
       - `DESECSTACK_IPV4_REAR_PREFIX16`: IPv4 net, size /16, for assignment of internal container IPv4 addresses. **NOTE:** If you change this in an existing setup, you 
         need to manually update persisted data structures such as the MySQL grant tables! Better don't do it.
@@ -62,11 +62,11 @@ Although most configuration is contained in this repository, some external depen
       - `DESECSTACK_NSLORD_DEFAULT_TTL`: TTL to use by default, including for default NS records
     - nsmaster-related
       - `DESECSTACK_DBMASTER_PASSWORD_pdns`: mysql password for pdns on nsmaster
-      - `DESECSTACK_NSMASTER_APIKEY`: pdns API key on nsmaster (required so that we can execute zone deletions on nsmaster, which replicates to the slaves)
+      - `DESECSTACK_NSMASTER_APIKEY`: pdns API key on nsmaster (required so that we can execute zone deletions on nsmaster, which replicates to the secondaries)
       - `DESECSTACK_NSMASTER_CARBONSERVER`: pdns `carbon-server` setting on nsmaster (optional)
       - `DESECSTACK_NSMASTER_CARBONOURNAME`: pdns `carbon-ourname` setting on nsmaster (optional)
     - monitoring-related
-      - `DESECSTACK_WATCHDOG_SLAVES`: space-separated list of slave hostnames; used to check correct replication of recent DNS changes
+      - `DESECSTACK_WATCHDOG_SECONDARIES`: space-separated list of secondary hostnames; used to check correct replication of recent DNS changes
       - `DESECSTACK_PROMETHEUS_PASSWORD`: basic auth password for user `prometheus` at `https://${DESECSTACK_DOMAIN}/prometheus/`
 
 How to Run
@@ -183,7 +183,7 @@ While there are certainly many ways to get started hacking desec-stack, here is 
 
        mkdir -p ~/bin
        cd ~/bin
-       curl https://raw.githubusercontent.com/desec-io/desec-certbot-hook/master/hook.sh > desec_certbot_hook.sh
+       curl https://raw.githubusercontent.com/desec-io/desec-certbot-hook/main/hook.sh > desec_certbot_hook.sh
        touch .dedynauth; chmod 600 .dedynauth
        echo DEDYN_TOKEN=${TOKEN} >> .dedynauth
        echo DEDYN_NAME=${DOMAIN} >> .dedynauth

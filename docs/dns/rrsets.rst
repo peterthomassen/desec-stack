@@ -263,11 +263,12 @@ given in the ``Link:`` response header.  For example::
       <https://desec.io/api/v1/domains/{domain}/rrsets/?cursor=:next_cursor>; rel="next"
 
 where ``:prev_cursor`` and ``:next_cursor`` are page identifiers that are to
-be treated opaque by clients.  On the first/last page, the ``Link:`` header
-will not contain a ``prev``/``next`` field, respectively.
+be treated as opaque by clients.  On the first/last page, the ``Link:`` header
+will not contain a ``prev``/``next`` link, respectively.
 
 If no pagination parameter is given although pagination is required, the server
-will return ``400 Bad Request``, along with instructions for pagination.
+will return ``400 Bad Request``, along with a ``Link:`` header containing the
+``first`` link, and human-readable instructions on pagination in the body.
 
 
 Filtering by Record Type
@@ -473,17 +474,15 @@ the process when some changes already have been applied.
 
 Field requirements
 ``````````````````
-In all cases, the ``subname`` field is optional.  If missing, the empty subname
-is assumed.
+For the ``POST`` and ``PUT`` methods, all fields are required for each given
+RRset.  With ``POST``, only new RRsets are acceptable (i.e. the domain must
+not yet have an RRset with the same subname and type), while ``PUT`` allows
+both creating new RRsets and modifying existing ones.
 
-For the ``POST`` and ``PUT`` methods, all other fields are required for each
-given RRset.  With ``POST``, only new RRsets are acceptable (i.e. the domain
-must not yet have an RRset with the same subname and type), while ``PUT``
-allows both creating new RRsets and modifying existing ones.
-
-For the ``PATCH`` method, only ``type`` is required; if you want to modify only
-``ttl`` or ``records``, you can skip the other field.  To create a new RRset
-using ``PATCH``, all fields but ``subname`` must be specified.
+For the ``PATCH`` method, only ``subname `` and ``type`` is required; if you
+want to modify only ``ttl`` or ``records``, you can skip the other field.  To
+create a new RRset using ``PATCH``, all fields but ``subname`` must be
+specified.
 
 To delete an RRset during a bulk operation, use ``PATCH`` or ``PUT`` and set
 ``records`` to ``[]``.

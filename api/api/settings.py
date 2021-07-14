@@ -230,7 +230,7 @@ VALIDITY_PERIOD_VERIFICATION_SIGNATURE = timedelta(hours=int(os.environ.get('DES
 CAPTCHA_VALIDITY_PERIOD = timedelta(hours=24)
 
 # Watchdog
-WATCHDOG_SLAVES = os.environ.get('DESECSTACK_WATCHDOG_SLAVES', '').split()
+WATCHDOG_SECONDARIES = os.environ.get('DESECSTACK_WATCHDOG_SECONDARIES', '').split()
 WATCHDOG_WINDOW_SEC = 600
 
 # Prometheus (see https://github.com/korfuri/django-prometheus/blob/master/documentation/exports.md)

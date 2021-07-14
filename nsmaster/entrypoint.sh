@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Route required for communicating with slave NS through VPN
+# Route required for communicating with secondaries through VPN
 /sbin/ip route add 10.8.0.0/24 via 172.16.7.2
 /sbin/ip route add 239.1.2.0/24 via 172.16.7.2
 

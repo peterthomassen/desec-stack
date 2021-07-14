@@ -1,7 +1,7 @@
 name: CI
 
 # Controls when the action will run. Triggers the workflow on push or pull request
-# events but only for the master branch
+# events but only for the main branch
 on:
   push:
     branches: [ main ]
@@ -57,7 +57,7 @@ jobs:
 
     - name: Run e2e2 Tests
       run: |
-        docker-compose -f docker-compose.yml -f docker-compose.test-e2e2.yml run -T test-e2e2 sh -c "./apiwait 300 && python3 -m pytest -vv ."
+        docker-compose -f docker-compose.yml -f docker-compose.test-e2e2.yml run -T test-e2e2 sh -c "./apiwait 300 && python3 -m pytest -vv --skip-performance-tests ."
 
     - name: e2e2 Tests Logs and Cleanup
       if: always()
