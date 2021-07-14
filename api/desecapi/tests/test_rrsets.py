@@ -372,6 +372,7 @@ class AuthenticatedRRSetTestCase(AuthenticatedRRSetBaseTestCase):
                      '47883 13 2 43BD262211B2A748335149408F67BC95B9A4A3174FD86E6A83830380446E7AFD'.lower())),
             ('CERT', ('06 00 00 sadfdd==', '6 0 0 sadfdQ==')),
             ('CNAME', ('EXAMPLE.COM.', 'example.com.')),
+            ('CSYNC', ('066 03  NS  AAAA A', '66 3 A NS AAAA')),
             ('DHCID', ('xxxx', 'xxxx')),
             ('DLV', ('6454 8 2 5CBA665A006F6487625C6218522F09BD3673C25FA10F25CB18459AA1 0DF1F520',
                      '6454 8 2 5CBA665A006F6487625C6218522F09BD3673C25FA10F25CB18459AA10DF1F520'.lower())),
@@ -392,8 +393,10 @@ class AuthenticatedRRSetTestCase(AuthenticatedRRSetBaseTestCase):
             ('EUI64', ('AA-BB-CC-DD-EE-FF-aa-aa', 'aa-bb-cc-dd-ee-ff-aa-aa')),
             ('HINFO', ('cpu os', '"cpu" "os"')),
             ('HINFO', ('"cpu" "os"', '"cpu" "os"')),
-            ('HTTPS', ('01 h3POOL.exaMPLe. aLPn=h2,h3 ECHCONFIG=MTIzLi4uCg==',
-                       '1 h3POOL.exaMPLe. alpn=h2,h3 echconfig="MTIzLi4uCg=="')),
+            ('HTTPS', ('01 h3POOL.exaMPLe. aLPn=h2,h3',
+                       '1 h3POOL.exaMPLe. alpn=h2,h3')),
+            # ('HTTPS', ('01 h3POOL.exaMPLe. aLPn=h2,h3 ECH=MTIzLi4uCg==',  # TODO dnspython > 2.1.0
+            #            '1 h3POOL.exaMPLe. alpn=h2,h3 ech="MTIzLi4uCg=="')),
             # ('IPSECKEY', ('01 00 02 . ASDFAF==', '1 0 2 . ASDFAA==')),
             # ('IPSECKEY', ('01 00 02 . 000000==', '1 0 2 . 00000w==')),
             ('KX', ('010 example.com.', '10 example.com.')),
@@ -418,8 +421,10 @@ class AuthenticatedRRSetTestCase(AuthenticatedRRSetBaseTestCase):
             ('SRV', ('100 1 5061 EXAMPLE.com.', '100 1 5061 example.com.')),
             ('SRV', ('100 1 5061 example.com.', '100 1 5061 example.com.')),
             ('SSHFP', ('2 2 aabbccEEddff', '2 2 aabbcceeddff')),
-            ('SVCB', ('2 sVc2.example.NET. ECHCONFIG=MjIyLi4uCg== IPV6hint=2001:db8:00:0::2 port=01234',
-                      '2 sVc2.example.NET. port=1234 echconfig="MjIyLi4uCg==" ipv6hint=2001:db8::2')),
+            ('SVCB', ('2 sVc2.example.NET. IPV6hint=2001:db8:00:0::2 port=01234',
+                      '2 sVc2.example.NET. port=1234 ipv6hint=2001:db8::2')),
+            # ('SVCB', ('2 sVc2.example.NET. ECH=MjIyLi4uCg== IPV6hint=2001:db8:00:0::2 port=01234',  # TODO dnspython > 2.1.0
+            #           '2 sVc2.example.NET. port=1234 ech="MjIyLi4uCg==" ipv6hint=2001:db8::2')),
             ('TLSA', ('3 0001 1 000AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', '3 1 1 000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')),
             ('TLSA', ('003 00 002 696B8F6B92A913560b23ef5720c378881faffe74432d04eb35db957c0a93987b47adf26abb5dac10ba482597ae16edb069b511bec3e26010d1927bf6392760dd',
                       '3 0 2 696b8f6b92a913560b23ef5720c378881faffe74432d04eb35db957c0a93987b47adf26abb5dac10ba482597ae16edb069b511bec3e26010d1927bf6392760dd')),
@@ -479,6 +484,7 @@ class AuthenticatedRRSetTestCase(AuthenticatedRRSetBaseTestCase):
                 '61655 13 4 C838A5C66FCBF83B8B6B50C3CEEC3524777FE4AF8A9FE0172ECAD242 48B0CA1A216DD0D538F20C130DD3059538204B04',
             ],
             'CNAME': ['example.com.'],
+            'CSYNC': ['0 0', '66 1 A', '66 2 AAAA', '66 3 A NS AAAA', '66 15 NSEC'],
             'DHCID': ['aaaaaaaaaaaa', 'aa aaa  aaaa a a a'],
             'DLV': [
                 '6454 8 1 24396E17E36D031F71C354B06A979A67A01F503E',
@@ -502,14 +508,14 @@ class AuthenticatedRRSetTestCase(AuthenticatedRRSetBaseTestCase):
             'EUI64': ['aa-bb-cc-dd-ee-ff-00-11', 'AA-BB-CC-DD-EE-FF-00-11'],
             'HINFO': ['"ARMv8-A" "Linux"'],
             'HTTPS': [
-                # from https://tools.ietf.org/html/draft-ietf-dnsop-svcb-https-02#section-10.3, with echconfig base64'd
+                # from https://www.ietf.org/archive/id/draft-ietf-dnsop-svcb-https-06.html#name-examples, with ech base64'd
                 '1 . alpn=h3',
                 '0 pool.svc.example.',
-                '1 h3pool.example. alpn=h2,h3 echconfig="MTIzLi4uCg=="',
-                '2 .      alpn=h2 echconfig="YWJjLi4uCg=="',
+                # '1 h3pool.example. alpn=h2,h3 ech="MTIzLi4uCg=="',  # TODO dnspython > 2.1.0
+                # '2 .      alpn=h2 ech="YWJjLi4uCg=="',  # TODO dnspython > 2.1.0
                 # made-up (not from RFC)
                 '1 pool.svc.example. no-default-alpn port=1234 ipv4hint=192.168.123.1',
-                '2 . echconfig=... key65333=ex1 key65444=ex2 mandatory=key65444,echconfig',  # see #section-7
+                # '2 . ech=... key65333=ex1 key65444=ex2 mandatory=key65444,ech',  # see #section-7  # TODO dnspython > 2.1.0
             ],
             # 'IPSECKEY': [
             #     '12 0 2 . asdfdf==',
@@ -537,7 +543,7 @@ class AuthenticatedRRSetTestCase(AuthenticatedRRSetBaseTestCase):
             'SVCB': [
                 '0 svc4-baz.example.net.',
                 '1 . key65333=...',
-                '2 svc2.example.net. echconfig="MjIyLi4uCg==" ipv6hint=2001:db8::2 port=1234',
+                # '2 svc2.example.net. ech="MjIyLi4uCg==" ipv6hint=2001:db8::2 port=1234',  # TODO dnspython > 2.1.0
             ],
             'TLSA': ['3 1 1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
                      '3 0 2 696b8f6b92a913560b23ef5720c378881faffe74432d04eb35db957c0a93987b47adf26abb5dac10ba482597ae16edb069b511bec3e26010d1927bf6392760dd',
@@ -592,6 +598,7 @@ class AuthenticatedRRSetTestCase(AuthenticatedRRSetBaseTestCase):
                 '6454 8 1 aabbccddeeff',
             ],
             'CNAME': ['example.com', '10 example.com.'],
+            'CSYNC': ['0 -1 A', '444 65536 A', '0 3 AAA'],
             'DHCID': ['x', 'xx', 'xxx'],
             'DLV': [
                 'a 8 1 24396E17E36D031F71C354B06A979A67A01F503E',
@@ -624,8 +631,8 @@ class AuthenticatedRRSetTestCase(AuthenticatedRRSetBaseTestCase):
             'EUI64': ['aa-bb-cc-dd-ee-ff-gg-11', 'AA-BB-C C-DD-EE-FF-00-11'],
             'HINFO': ['"ARMv8-A"', f'"a" "{"b"*256}"'],
             'HTTPS': [
-                # from https://tools.ietf.org/html/draft-ietf-dnsop-svcb-https-02#section-10.3, with echconfig base64'd
-                '1 h3pool alpn=h2,h3 echconfig="MTIzLi4uCg=="',
+                # from https://tools.ietf.org/html/draft-ietf-dnsop-svcb-https-02#section-10.3, with ech base64'd
+                # '1 h3pool alpn=h2,h3 ech="MTIzLi4uCg=="',  # TODO dnspython > 2.1.0
                 # made-up (not from RFC)
                 '0 pool.svc.example. no-default-alpn port=1234 ipv4hint=192.168.123.1',  # no keys in alias mode
                 '1 pool.svc.example. no-default-alpn port=1234 ipv4hint=192.168.123.1 ipv4hint=192.168.123.2',  # dup
@@ -648,7 +655,7 @@ class AuthenticatedRRSetTestCase(AuthenticatedRRSetBaseTestCase):
             'SVCB': [
                 '0 svc4-baz.example.net. keys=val',
                 '1 not.fully.qualified key65333=...',
-                '2 duplicate.key. echconfig="MjIyLi4uCg==" echconfig="MjIyLi4uCg=="',
+                # '2 duplicate.key. ech="MjIyLi4uCg==" ech="MjIyLi4uCg=="',  # TODO dnspython > 2.1.0
             ],
             'TLSA': ['3 1 1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'],
             'TXT': [
